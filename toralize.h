@@ -1,6 +1,7 @@
 /* toralize.h */
 
 #include <arpa/inet.h>
+#include <dlfcn.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <stdio.h>
@@ -54,6 +55,6 @@ struct proxy_response
 
 typedef struct proxy_response Res;
 
-Req *request(const char *, const int);
-char *dns_to_ip(const char *hostname);
-int main(int, char **);
+Req *request(struct sockaddr_in *);
+// char *dns_to_ip(const char *hostname);
+int connect(int, const struct sockaddr *, socklen_t);

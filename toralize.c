@@ -1,6 +1,7 @@
 /* toralize.c */
 #include "toralize.h"
 #include <arpa/inet.h>
+#include <dlfcn.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <stdio.h>
@@ -9,7 +10,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-Req *request(const char *dstip, const int dstport)
+Req *request(struct sockaddr_in *sock2)
 {
 	Req *req;
 
@@ -17,13 +18,15 @@ Req *request(const char *dstip, const int dstport)
 	req->vn = 4;
 	req->cd = 1;
 
-	req->dstport = htons(dstport);
-	req->dstip = inet_addr(dstip);
+	req->dstport = sock2->sin_port;
+	req->dstip = sock2->sin_addr.s_addr;
+
 	strncpy((char *)(req->userid), USERNAME, 8);
 
 	return req;
 }
 
+/*
 char *dns_to_ip(const char *hostname)
 {
 	struct addrinfo hints, *res, *p;
@@ -61,11 +64,12 @@ char *dns_to_ip(const char *hostname)
 
 	return ipstr;
 }
+*/
 
-int main(int argc, char *argv[])
+int connect(int s2, const struct sockaddr *sock2, socklen_t addrlen)
 {
-	const char *host;
-	int port, s;
+
+	int s;
 	struct sockaddr_in sock;
 	Req *req;
 	char buf[ressize];
@@ -73,23 +77,9 @@ int main(int argc, char *argv[])
 	int success;
 	char tmp[512];
 
-	if (argc < 2)
-	{
-		fprintf(stderr, "Usage: %s <host> <port> \n", argv[0]);
+	int (*p)(int, const struct sockaddr *, socklen_t);
 
-		return -1;
-	}
-
-	host = argv[1];
-	port = 80;
-	char *ip = dns_to_ip(host);
-
-	printf("%s\n", ip);
-
-	if (ip == NULL)
-	{
-		fprintf(stderr, "Failed to resolve hostname: %s \n", host);
-	}
+	p = dlsym(RTLD_NEXT, "connect");
 
 	s = socket(AF_INET, SOCK_STREAM, 0);
 	if (s < 0)
@@ -102,7 +92,7 @@ int main(int argc, char *argv[])
 	sock.sin_port = htons(PROXYPORT);
 	sock.sin_addr.s_addr = inet_addr(PROXY);
 
-	if (connect(s, (struct sockaddr *)&sock, sizeof(sock)))
+	if (p(s, (struct sockaddr *)&sock, sizeof(sock)))
 	{
 		perror("connect");
 		return -1;
@@ -110,7 +100,7 @@ int main(int argc, char *argv[])
 
 	printf("Connected to Proxy Server \n");
 
-	req = request(ip, port);
+	req = request((struct sockaddr_in *)sock2);
 	write(s, req, reqsize);
 
 	memset(buf, 0, ressize);
@@ -135,24 +125,9 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	printf("Successfully connected through the proxy to %s:%d", ip, port);
-
-	memset(tmp, 0, 512);
-
-	snprintf(tmp, 511,
-			 "HEAD / HTTP/1.0\r\n"
-			 "Host: www.networktechnology.org\r\n"
-			 "\r\n");
-
-	write(s, tmp, strlen(tmp));
-	memset(tmp, 0, 512);
-	read(s, tmp, 511);
-
-	printf("'%s'\n", tmp);
-
-	close(s);
+	printf("Successfully connected through the proxy");
+	dup2(s, s2);
 	free(req);
-	free(ip);
 
 	return 0;
 }
